@@ -754,6 +754,41 @@ sub load_slenkins_tests {
     return 0;
 }
 
+sub generate_rewrite_rules {
+
+  # Generate DNS and Proxy routes for handling d.o.o. -> openqa mirror redirection.
+  my $automatic_rewrite_rules = get_var('CONNECTIONS_HIJACK') && get_var('SUSEMIRROR');
+  my $proxy_entry = get_var('CONNECTIONS_HIJACK_PROXY_ENTRY');
+  my $dns_entry = get_var('CONNECTIONS_HIJACK_DNS_ENTRY');
+
+  # push DNS and Proxy rules only if we didn't supplied them manually
+  if($automatic_rewrite_rules && (!$proxy_entry || ($proxy_entry && $proxy_entry !~ /download\.opensuse\.org/))) {
+    my @rules = (
+      "download.opensuse.org",                      get_var('SUSEMIRROR') ,
+      "/tumbleweed/repo/.*oss/repodata",            "/suse/repodata",
+      "/tumbleweed/repo/.*oss/",                    "/",
+      "^" .  get_var('ARCH') . "/",                 "/suse/" .  get_var('ARCH')  . "/",
+      "/YaST/Repos/openSUSE_Factory_Servers.xml",   "FORWARD",
+      "/YaST/Repos/_openSUSE_Factory_Default.xml",  "FORWARD",
+      "/.*/leap/.*/repo/.*oss/",                    "/",
+      "/.*/leap/.*/.*oss/repodata",                 "/suse/repodata"
+    );
+    $proxy_entry = $proxy_entry ? "$proxy_entry,". join(":",@rules) :  join(":",@rules);
+    set_var("CONNECTIONS_HIJACK_PROXY_ENTRY",       $proxy_entry );
+    set_var("CONNECTIONS_HIJACK_PROXY_POLICY",      "URLREWRITE") if !get_var("CONNECTIONS_HIJACK_PROXY_POLICY");
+  }
+
+  if($automatic_rewrite_rules && ( !$dns_entry || ( $dns_entry and $dns_entry !~ /download\.opensuse\.org/))) {
+    my $rule = 'download.opensuse.org:'.(get_var('WORKER_HOSTNAME') || '10.0.2.2');
+    $rule    = "$dns_entry,$rule" if $dns_entry;
+    set_var('CONNECTIONS_HIJACK_DNS_ENTRY',         $rule );
+    set_var("CONNECTIONS_HIJACK_DNS_POLICY",        "FORWARD") if !get_var("CONNECTIONS_HIJACK_DNS_POLICY");
+  }
+}
+
+# Generate automatically rewrite rules for Proxy and DNS components if needed
+generate_rewrite_rules();
+
 # load the tests in the right order
 if (maybe_load_kernel_tests()) {
 }
